@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="dataSourceStorageLocal" created-in="IU-243.26053.27">
+    <data-source name="myq-central" uuid="30a7031a-b534-4b70-a760-a11b38edcf1c">
+      <database-info product="Firebird 3.0" version="WI-V3.0.10.33601" jdbc-version="4.3" driver-name="Jaybird JCA/JDBC driver" driver-version="4.0.2" dbms="FIREBIRD" exact-version="3.0" exact-driver-version="4.0">
+        <extra-name-characters>$</extra-name-characters>
+        <identifier-quote-string>&quot;</identifier-quote-string>
+      </database-info>
+      <case-sensitivity plain-identifiers="upper" quoted-identifiers="exact" />
+      <secret-storage>master_key</secret-storage>
+      <user-name>SYSDBA</user-name>
+      <schema-mapping>
+        <introspection-scope>
+          <node kind="database" qname="@">
+            <node kind="schema" qname="@" />
+          </node>
+        </introspection-scope>
+      </schema-mapping>
+    </data-source>
+  </component>
+</project>

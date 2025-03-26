@@ -1,0 +1,5 @@
+host: myq-master.ad.img.cas.cz
+port: 3051
+path: MYQ
+username: SYSDBA
+password: vFnXLLp9PMM

@@ -1,0 +1,109 @@
+.button{
+    -fx-background-radius: 5;
+    /*-fx-border-color:  #cccccc;*/
+    -fx-border-radius: 5;
+    -fx-border-width: 1;
+    -fx-font-size: 16;
+    -fx-font-weight: bold;
+    -fx-text-fill:  white;
+    -fx-font-family: "Calibri";
+    -fx-text-alignment: center;
+    -fx-effect: dropshadow(three-pass-box, rgba(100,100,100,1), 0, 0, 4, 4);
+}
+
+.button:hover{
+    -fx-background-radius: 5;
+    /*-fx-border-color:  #cccccc;*/
+    -fx-border-radius: 5;
+    -fx-text-fill:  white;
+    -fx-text-alignment: center;
+    /*-fx-font-weight: bold;*/
+    /*-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,0.8), 10, 0, 0, 0);*/
+    /*-fx-background-color: #cccccc;*/
+    /*-fx-scale-y: 1.1;*/
+}
+
+.button:pressed{
+    -fx-background-radius: 5;
+    /*-fx-border-color:  #cccccc;*/
+    -fx-border-radius: 5;
+    -fx-text-fill:  white;
+    -fx-text-alignment: center;
+    /*-fx-font-weight: bold;*/
+    /*-fx-effect: dropshadow(three-pass-box, rgba(100,100,100,1), 0, 0, 4, 4);*/
+    /*-fx-background-color:  #f24f13;*/
+    -fx-scale-y: 0.95;
+    -fx-scale-x: 0.95;
+}
+
+#controlPane{
+    -fx-background-color:  #f8f8f8;
+    -webkit-fx-border-color:  transparent transparent #e7e7e7 transparent;
+    -moz-fx-border-color:  transparent transparent #e7e7e7 transparent;
+    -ms-fx-border-color:  transparent transparent #e7e7e7 transparent;
+    -o-fx-border-color:  transparent transparent #e7e7e7 transparent;
+    -khtml-fx-border-color:  transparent transparent #e7e7e7 transparent;
+    fx-border-color:  transparent transparent #e7e7e7 transparent;
+    /*-fx-effect: dropshadow(three-pass-box, rgba(0,0,0,1), 0, 0, 0, 20);*/
+}
+#appnameField {
+    -fx-background-color: #f8f8f8;
+    -fx-text-fill: #318fd8;
+    -fx-font-size: 21;
+    -fx-font-weight: normal;
+    -fx-font-family: "Calibri";
+}
+
+#loadReportButton{
+    -fx-background-color:  #68b857;
+}
+
+#loadReportButton:hover{
+    -fx-background-color:  #457939;
+}
+
+#addReportButton{
+    -fx-background-color:  #eaac45;
+}
+
+#addReportButton:hover{
+    -fx-background-color:  #d08d1f;
+}
+
+#compareButton{
+    -fx-background-color:  #6bc0e0;
+}
+
+#compareButton:hover{
+    -fx-background-color:  #4e8ba0;
+}
+
+#loadMyQDataButton{
+    -fx-background-color:  #da172c;
+}
+
+#loadMyQDataButton:hover{
+    -fx-background-color:  #a90f1f;
+}
+
+#checkButton{
+    -fx-background-color:  #6f00ff;
+}
+
+#checkButton:hover{
+    -fx-background-color:  #4b00a0;
+}
+
+#saveToPDFButtton{
+    -fx-background-color:  #8a0303;
+}
+
+#saveToPDFButtton:hover{
+    -fx-background-color:  #6a0202;
+}
+
+#logOutput{
+    -fx-control-inner-background:  #cccccc;
+    -fx-background-color: #cccccc;
+    -fx-text-fill:  #f24f13;
+}

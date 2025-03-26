@@ -1,0 +1,11 @@
+/* Style for matching cells */
+.matched {
+    -fx-background-color: lightgreen;
+    -fx-text-fill: white;
+}
+
+/* Style for unmatched cells */
+.unmatched {
+    -fx-background-color: red;
+    -fx-text-fill: white;
+}

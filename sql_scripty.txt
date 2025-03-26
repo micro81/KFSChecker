@@ -1,0 +1,34 @@
+SELECT
+    p.name "Printer name",
+    p.model "Model name",
+    p.serialnumber "Serial number",
+    p.ipaddress "IP address",
+    p.assetno "Asset number",
+    SUM(pc.printermono+pc.copiermono+pc.printercolor+pc.copiercolor) "Combined total",
+    SUM(pc.printermono+pc.copiermono) "Black & white total",
+    SUM(pc.printercolor+pc.copiercolor) "Color total",
+    SUM(pc.copiermono) "Copier black & white",
+    SUM(pc.copiercolor) "Copier color total",
+    SUM(pc.printermono) "Printer black & white",
+    SUM(pc.printercolor) "Printer color total"
+        
+
+FROM
+    usersession pc
+    JOIN printer p ON pc.printer_id = p.id
+
+WHERE
+    pc.id is not null
+    AND (pc.finishdate >= '2024-11-30 15:48:00' AND pc.finishdate <= '2025-01-13 17:24:21') /* v KFS reportu datum a cas ze sloupce "Date/time (Obtain data) */
+    AND (
+    pc.printermono > 0
+        OR pc.printercolor > 0
+        OR pc.copiermono > 0
+        OR pc.copiercolor > 0
+    ) AND p.serialnumber LIKE 'RVF2931578'
+
+GROUP BY 1, 2, 3, 4, 5
+ORDER BY p.ipaddress ASC
+
+------------------------------------------
+pc.finishdate = "Date/time (Obtain data)" ve formatu 'YYYY-MM-DD HH:MM:SS'
