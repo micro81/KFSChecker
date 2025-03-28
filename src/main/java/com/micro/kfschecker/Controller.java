@@ -158,11 +158,18 @@ public class Controller {
             boolean isHeader = true;
 
             while ((line = br.readLine()) != null) {
-                //line = line.replaceAll("^\"+|\"+$", ""); // Odstranění uvozovek na začátku a na konci řádku
                 line = line.replaceAll("Ústav molekulární genetiky AV ČR, v.v.i.", "IMG"); //nahrada dlouheho nazvu instituce
                 line = line.replaceAll("\"", ""); // odstraneni uvozovek
-                //String[] values = line.split("\",\"");
                 String[] values = line.split(","); //oddelovaci znak je carka
+
+                // Kontrola, zda řádek obsahuje alespoň jednu neprázdnou hodnotu
+                boolean isEmptyRow = true;
+                for (String value : values) {
+                    if (!value.trim().isEmpty()) {
+                        isEmptyRow = false;
+                        break;
+                    }
+                }
 
                 if (isHeader) {
                     for (int i = 0; i < values.length; i++) {
@@ -173,7 +180,10 @@ public class Controller {
                     }
                     isHeader = false;
                 } else {
-                    tableView.getItems().add(FXCollections.observableArrayList(Arrays.asList(values)));
+                    // Přidáme řádek do tabulky pouze pokud není prázdný
+                    if (!isEmptyRow) {
+                        tableView.getItems().add(FXCollections.observableArrayList(Arrays.asList(values)));
+                    }
                 }
             }
             System.out.println("OK");
