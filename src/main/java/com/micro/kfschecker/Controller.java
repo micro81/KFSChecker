@@ -3,6 +3,7 @@ package com.micro.kfschecker;
 import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
 
+import javafx.beans.property.SimpleStringProperty;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.fxml.FXML;
@@ -26,11 +27,16 @@ import java.nio.file.Paths;
 import java.sql.*;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
+import java.util.*;
 import java.util.Date;
+import java.util.List;
+
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
+import org.apache.commons.io.IOUtils;
+
+import static org.apache.commons.io.IOUtils.toByteArray;
 
 public class Controller {
 
@@ -121,6 +127,15 @@ public class Controller {
             return inputDate;
         }
     }
+
+    private <T> TableCell<ObservableList<String>, T> getTableCell(TableView<ObservableList<String>> tableView, int row, int column) {
+        if (row < 0 || row >= tableView.getItems().size() || column < 0 || column >= tableView.getColumns().size()) {
+            return null;
+        }
+        TableColumn<ObservableList<String>, T> tableColumn = (TableColumn<ObservableList<String>, T>) tableView.getColumns().get(column);
+        return tableColumn.getCellFactory().call(tableColumn);
+    }
+
     @FXML
     private void handleLoadReport() {
         FileChooser fileChooser = new FileChooser();
@@ -153,47 +168,58 @@ public class Controller {
 
         TableView<ObservableList<String>> tableView = new TableView<>();
 
-        try (BufferedReader br = new BufferedReader(new FileReader(file))) {
-            String line;
+        CSVFormat csvFormat = CSVFormat.Builder.create(CSVFormat.DEFAULT)
+                .setQuote('\"') // Nastavíme klasickou-dvojitou uvozovku jako znak pro řetězce
+                .build();
+
+        try (
+             Reader reader = Files.newBufferedReader(Paths.get(file.getAbsolutePath()));
+             //CSVParser csvParser = new CSVParser(reader, CSVFormat.DEFAULT) // Používáme výchozí formát, tj. středník jako oddělovač a dvojité uvozovky pro řetězce
+             CSVParser csvParser = new CSVParser(reader, csvFormat)
+        )
+        {
+
             boolean isHeader = true;
-
-            while ((line = br.readLine()) != null) {
-                line = line.replaceAll("Ústav molekulární genetiky AV ČR, v.v.i.", "IMG"); //nahrada dlouheho nazvu instituce
-                line = line.replaceAll("\"", ""); // odstraneni uvozovek
-                String[] values = line.split(","); //oddelovaci znak je carka
-
-                // Kontrola, zda řádek obsahuje alespoň jednu neprázdnou hodnotu
-                boolean isEmptyRow = true;
-                for (String value : values) {
-                    if (!value.trim().isEmpty()) {
-                        isEmptyRow = false;
-                        break;
-                    }
-                }
-
+            for (CSVRecord csvRecord : csvParser) {
                 if (isHeader) {
-                    for (int i = 0; i < values.length; i++) {
-                        TableColumn<ObservableList<String>, String> column = new TableColumn<>(values[i]);
+                    for (int i = 0; i < csvRecord.size(); i++) {
+                        String headerText = csvRecord.get(i);
+                        if (i == 0) {
+                            headerText = headerText.replace("\"", ""); // Odstraníme dvojité uvozovky z hlavičky prvního sloupce
+                        }
+                        TableColumn<ObservableList<String>, String> column = new TableColumn<>(headerText);
                         final int colIndex = i;
-                        column.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(data.getValue().get(colIndex)));
+                        column.setCellValueFactory(data -> new SimpleStringProperty(data.getValue().get(colIndex)));
                         tableView.getColumns().add(column);
                     }
                     isHeader = false;
                 } else {
-                    // Přidáme řádek do tabulky pouze pokud není prázdný
+                    ObservableList<String> rowData = FXCollections.observableArrayList();
+                    for (String value : csvRecord) {
+                        rowData.add(value);
+                    }
+                    // Kontrola na prázdný řádek (po oříznutí)
+                    boolean isEmptyRow = true;
+                    for (String value : rowData) {
+                        if (!value.trim().isEmpty()) {
+                            isEmptyRow = false;
+                            break;
+                        }
+                    }
                     if (!isEmptyRow) {
-                        tableView.getItems().add(FXCollections.observableArrayList(Arrays.asList(values)));
+                        tableView.getItems().add(rowData);
                     }
                 }
             }
             System.out.println("OK");
+
         } catch (IOException e) {
             System.err.println("Error: Cannot load csv file");
             e.printStackTrace();
         }
-        tablesContainer.getChildren().addAll(fileLabel, tableView); // Přidání názvu souboru a tabulky do VBoxu
+        tablesContainer.getChildren().addAll(fileLabel, tableView);
         System.out.println("there are  oncreate " + tablesContainer.getChildren().size());
-        saveToPDFButtton.setDisable(false); // Aktivace tlačítka Export to PDF
+        saveToPDFButtton.setDisable(false);
     }
 
     private void updateCompareButtonState() {
@@ -365,7 +391,7 @@ public class Controller {
 
     @FXML
     private void handleCheck() {
-        if (tablesContainer.getChildren().size() < 6) {
+        if (tablesContainer.getChildren().size() < 8) { // Upravená kontrola, index 7 znamená minimálně 8 prvků
             System.out.println("Error: Tables are missing.");
             return;
         }
@@ -373,46 +399,64 @@ public class Controller {
         TableView<ObservableList<String>> resultTable = (TableView<ObservableList<String>>) tablesContainer.getChildren().get(5);
         TableView<ObservableList<String>> myqTable = (TableView<ObservableList<String>>) tablesContainer.getChildren().get(7);
 
-        List<String> warnings = new ArrayList<>(); // Seznam pro uchování varování
+        List<String> warnings = new ArrayList<>();
+        Set<TablePosition> resultMismatches = new HashSet<>(); // Pro uložení pozic nesrovnalostí v resultTable
+        Set<TablePosition> myqMismatches = new HashSet<>(); // Pro uložení pozic nesrovnalostí v myqTable
 
-        for (ObservableList<String> resultRow : resultTable.getItems()) {
-            String keyResult = resultRow.get(2); // Klíč ve 3. sloupci
+        for (int i = 0; i < resultTable.getItems().size(); i++) {
+            ObservableList<String> resultRow = resultTable.getItems().get(i);
+            if (resultRow.size() > 2) {
+                String keyResult = resultRow.get(2);
 
-            for (ObservableList<String> myqRow : myqTable.getItems()) {
-                String keyMyq = myqRow.get(2); // Klíč ve 3. sloupci
+                for (int j = 0; j < myqTable.getItems().size(); j++) {
+                    ObservableList<String> myqRow = myqTable.getItems().get(j);
+                    if (myqRow.size() > 2) {
+                        String keyMyq = myqRow.get(2);
 
-                if (keyResult.equals(keyMyq)) {
-                    String resultValue1 = resultRow.get(8); // 9. sloupec
-                    String myqValue1 = myqRow.get(6); // 7. sloupec
+                        if (keyResult.equals(keyMyq)) {
+                            if (resultRow.size() > 8 && myqRow.size() > 6) {
+                                String resultValue1 = resultRow.get(8);
+                                String myqValue1 = myqRow.get(6);
 
-                    String resultValue2 = resultRow.get(9); // 10. sloupec
-                    String myqValue2 = myqRow.get(7); // 8. sloupec
+                                if (!Objects.equals(resultValue1, myqValue1)) {
+                                    String warning = "Mismatch in column 9/7 for key " + keyResult + ": " + resultValue1 + " != " + myqValue1;
+                                    warnings.add(warning);
+                                    System.out.println(warning);
+                                    resultMismatches.add(new TablePosition<>(resultTable, i, resultTable.getColumns().get(8)));
+                                    myqMismatches.add(new TablePosition<>(myqTable, j, myqTable.getColumns().get(6)));
+                                }
+                            }
 
-                    if (!Objects.equals(resultValue1, myqValue1)) {
-                        String warning = "Mismatch in column 9/7 for key " + keyResult + ": " + resultValue1 + " != " + myqValue1;
-                        warnings.add(warning);
-                        System.out.println(warning);
-                    }
+                            if (resultRow.size() > 9 && myqRow.size() > 7) {
+                                String resultValue2 = resultRow.get(9);
+                                String myqValue2 = myqRow.get(7);
 
-                    if (!Objects.equals(resultValue2, myqValue2)) {
-                        String warning = "Mismatch in column 10/8 for key " + keyResult + ": " + resultValue2 + " != " + myqValue2;
-                        warnings.add(warning);
-                        System.out.println(warning);
+                                if (!Objects.equals(resultValue2, myqValue2)) {
+                                    String warning = "Mismatch in column 10/8 for key " + keyResult + ": " + resultValue2 + " != " + myqValue2;
+                                    warnings.add(warning);
+                                    System.out.println(warning);
+                                    resultMismatches.add(new TablePosition<>(resultTable, i, resultTable.getColumns().get(9)));
+                                    myqMismatches.add(new TablePosition<>(myqTable, j, myqTable.getColumns().get(7)));
+                                }
+                            }
+                        }
                     }
                 }
             }
         }
 
-        // Deklarace proměnné alert
         Alert alert;
-
-        // Pokud jsou varování, zobrazíme je v jednom okně
         if (!warnings.isEmpty()) {
             alert = new Alert(AlertType.WARNING);
             alert.setTitle("Mismatches Found");
             alert.setHeaderText(null);
-            alert.setContentText(String.join("\n", warnings)); // Spojení všech varování do jednoho textu
+            alert.setContentText(String.join("\n", warnings));
             alert.showAndWait();
+
+            // Nastavení CellFactory pro podbarvení buněk
+            highlightMismatches(resultTable, resultMismatches);
+            highlightMismatches(myqTable, myqMismatches);
+
         } else {
             alert = new Alert(AlertType.INFORMATION);
             alert.setTitle("Check Completed");
@@ -421,8 +465,34 @@ public class Controller {
             System.out.println("No mismatches found.");
             alert.showAndWait();
         }
-
     }
+
+    private void highlightMismatches(TableView<ObservableList<String>> tableView, Set<TablePosition> mismatches) {
+        for (TableColumn<?, ?> col : tableView.getColumns()) {
+            TableColumn<ObservableList<String>, Object> column = (TableColumn<ObservableList<String>, Object>) col;
+            column.setCellFactory(c -> new TableCell<ObservableList<String>, Object>() {
+                @Override
+                protected void updateItem(Object item, boolean empty) {
+                    super.updateItem(item, empty);
+                    if (empty) {
+                        setText(null);
+                        getStyleClass().remove("mismatch-cell"); // Odstraníme třídu, pokud je buňka prázdná
+                    } else {
+                        setText(item == null ? "" : item.toString());
+                        TablePosition pos = new TablePosition(tableView, getTableRow().getIndex(), column);
+                        if (mismatches.contains(pos)) {
+                            if (!getStyleClass().contains("mismatch-cell")) {
+                                getStyleClass().add("mismatch-cell"); // Přidáme CSS třídu pro mismatch
+                            }
+                        } else {
+                            getStyleClass().remove("mismatch-cell"); // Odstraníme CSS třídu, pokud není mismatch
+                        }
+                    }
+                }
+            });
+        }
+    }
+
 
     @FXML
     private void handleSaveToPDF() {
@@ -450,13 +520,29 @@ public class Controller {
             headerTable.setWidths(new float[]{1, 3}); // Nastavení poměru šířky sloupců
 
             //Vlozeni loga do PDF
-            URL imageUrl = getClass().getProtectionDomain().getCodeSource().getLocation();
-            System.out.println("IMG logo is in path: " + imageUrl);
-            Image logo = Image.getInstance(imageUrl+"../../src/main/resources/com/micro/kfschecker/img/imglogo-basic-color-nobg-rgb.png");
-            logo.scaleToFit(80, 31);
-            PdfPCell logoCell = new PdfPCell(logo, false);
-            logoCell.setBorder(Rectangle.NO_BORDER);
-            logoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+            InputStream imageStream = getClass().getResourceAsStream("/com/micro/kfschecker/img/imglogo-basic-color-nobg-rgb.png");
+            if (imageStream != null) {
+                try {
+                    Image logo = Image.getInstance(toByteArray(imageStream)); // Používám vaši vlastní metodu pro jistotu
+                    logo.scaleToFit(80, 31);
+                    PdfPCell logoCell = new PdfPCell(logo, false);
+                    logoCell.setBorder(Rectangle.NO_BORDER);
+                    logoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
+                    headerTable.addCell(logoCell); // Přesunuto sem
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    // Handle the case where the image could not be loaded
+                } finally {
+                    try {
+                        imageStream.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            } else {
+                System.err.println("Could not load logo image from classpath: /com/micro/kfschecker/img/imglogo-basic-color-nobg-rgb.png");
+                // Pokud se obrázek nepodaří načíst, logoCell se nevytvoří a nepřidá se do tabulky
+            }
 
             //Vlozeni nadpisu do PDF
             com.itextpdf.text.Font headerFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 20, new BaseColor(49, 143, 216)); // Barva textu
@@ -466,7 +552,6 @@ public class Controller {
             textCell.setHorizontalAlignment(Element.ALIGN_LEFT);
             textCell.setBackgroundColor(new BaseColor(255, 255, 255)); // Barva pozadí
 
-            headerTable.addCell(logoCell);
             headerTable.addCell(textCell);
             document.add(headerTable);
             document.add(new Paragraph("\n"));
@@ -482,15 +567,37 @@ public class Controller {
                     PdfPTable pdfTable = new PdfPTable(tableView.getColumns().size());
                     pdfTable.setWidthPercentage(100); // Nastavení tabulky na celou šířku stránky
 
+                    // Přidání hlaviček
                     for (TableColumn<ObservableList<String>, ?> column : tableView.getColumns()) {
                         PdfPCell headerCell = new PdfPCell(new Phrase(column.getText(), FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, BaseColor.WHITE))); // Nastavení bílé barvy fontu
                         headerCell.setBackgroundColor(new BaseColor(242, 79, 19)); // Nastavení barvy záhlaví #f24f13
                         pdfTable.addCell(headerCell);
                     }
 
-                    for (ObservableList<String> row : tableView.getItems()) {
-                        for (String cell : row) {
-                            pdfTable.addCell(new PdfPCell(new Phrase(cell, FontFactory.getFont(FontFactory.HELVETICA, 8))));
+                    // Přidání datových řádků
+                    for (int rowIndex = 0; rowIndex < tableView.getItems().size(); rowIndex++) {
+                        ObservableList<String> row = tableView.getItems().get(rowIndex);
+                        for (int columnIndex = 0; columnIndex < tableView.getColumns().size(); columnIndex++) {
+                            String cellValue = row.get(columnIndex);
+                            TableColumn<ObservableList<String>, ?> column = tableView.getColumns().get(columnIndex);
+
+                            // Pokusíme se získat barvu pozadí buňky
+                            javafx.scene.control.TableCell<ObservableList<String>, ?> tableCell = getTableCell(tableView, rowIndex, columnIndex);
+                            javafx.scene.paint.Color fxBackgroundColor = null;
+                            if (tableCell != null && tableCell.getBackground() != null) {
+                                fxBackgroundColor = (javafx.scene.paint.Color) tableCell.getBackground().getFills().get(0).getFill();
+                            }
+
+                            PdfPCell pdfCell = new PdfPCell(new Phrase(cellValue, FontFactory.getFont(FontFactory.HELVETICA, 8)));
+
+                            // Nastavení barvy pozadí PDF buňky, pokud je k dispozici
+                            if (fxBackgroundColor != null) {
+                                int red = (int) (fxBackgroundColor.getRed() * 255);
+                                int green = (int) (fxBackgroundColor.getGreen() * 255);
+                                int blue = (int) (fxBackgroundColor.getBlue() * 255);
+                                pdfCell.setBackgroundColor(new BaseColor(red, green, blue));
+                            }
+                            pdfTable.addCell(pdfCell);
                         }
                     }
                     document.add(pdfTable);

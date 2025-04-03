@@ -4,6 +4,8 @@ module com.micro.kfschecker {
     requires java.sql;
     requires java.desktop;
     requires itextpdf;
+    requires org.apache.commons.csv;
+    requires org.apache.commons.io;
 
 
     opens com.micro.kfschecker to javafx.fxml;

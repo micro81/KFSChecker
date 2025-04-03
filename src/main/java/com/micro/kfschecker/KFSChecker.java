@@ -31,8 +31,10 @@ public class KFSChecker extends Application {
         // Create a new Scene
         Scene scene = new Scene(root, 1500, 800);
 
-        // Add the stylesheet to the scene
+        // Načtení prvního CSS souboru
         scene.getStylesheets().add(getClass().getResource("css/main_style-IMG.css").toExternalForm());
+        // Načtení druhého CSS souboru
+        scene.getStylesheets().add(getClass().getResource("css/Style.css").toExternalForm());
         primaryStage.setTitle("KFS Checker");
         primaryStage.setScene(scene);
         primaryStage.show();

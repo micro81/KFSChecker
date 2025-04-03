@@ -49,3 +49,8 @@
     /*-fx-border-radius: 7px;*/
     -fx-border-width: 1px;
 }
+
+/* Style for unmatched cells */
+.table-cell.mismatch-cell {
+    -fx-background-color: #f24f13;
+}
