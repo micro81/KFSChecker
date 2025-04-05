@@ -33,6 +33,8 @@ import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -79,6 +81,7 @@ public class Controller {
     private String dbPassword;
     private String myqQuery;
     private TextAreaAppender TextAreaAppender;
+    private ExecutorService executorService = Executors.newSingleThreadExecutor();
 
     @FXML
     private void initialize() {
@@ -295,117 +298,137 @@ public class Controller {
             return;
         }
 
-        //System.out.println("Loading MyQ Data...");
-        logger.info("Loading MyQ Data...");
+        logger.info("Starting to load MyQ Data in background...");
+        progressBar.setVisible(true);
+        logger.info("Nastavuji ProgressBar na true");
 
+        // Pouze pro testování
+        try {
+            Thread.sleep(2000);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+
+        checkButton.setDisable(true); // Deaktivace tlačítka CHECK během načítání
 
         TableView<ObservableList<String>> firstTable = (TableView<ObservableList<String>>) tablesContainer.getChildren().get(1);
         TableView<ObservableList<String>> secondTable = (TableView<ObservableList<String>>) tablesContainer.getChildren().get(3);
 
-        Label myqLabel = new Label("MyQ DATA");
-        myqLabel.setFont(Font.font("Arial", 14));
-        myqLabel.setTextFill(Color.web("#f24f13"));
-        myqLabel.setStyle("-fx-font-weight: bold;");
-
-        TableView<ObservableList<String>> myqTable = new TableView<>();
-
-        try {
-            // Attempt to load the Firebird JDBC driver
-            Class.forName("org.firebirdsql.jdbc.FBDriver");
-        } catch (ClassNotFoundException e) {
-            //System.err.println("Error: Firebird JDBC driver not found. Please make sure the driver library is included in your classpath.");
-            logger.error("Error: Firebird JDBC driver not found. Please make sure the driver library is included in your classpath.");
-            e.printStackTrace();
-            return; // Exit the method early due to the missing driver
-        }
-
-
-        Connection conn = null;
-        int attempts = 0;
-        while (attempts < 3) {
-            try {
-                conn = DriverManager.getConnection(dbUrl, dbUsername, dbPassword);
-                //System.out.println("Connection established successfully!");
-                logger.info("Connection established successfully!");
-                break;
-            } catch (SQLException e) {
-                attempts++;
-                //System.err.println("Connection attempt " + attempts + " failed. Retrying in 3 seconds...");
-                logger.error("Connection attempt " + attempts + " failed. Retrying in 3 seconds...");
-                if (attempts == 3) {
-                    //System.err.println("Error: Unable to connect to the database after 3 attempts.");
-                    logger.error("Error: Unable to connect to the database after 3 attempts.");
-                    e.printStackTrace();
-                    return;
-                }
+        Task<TableView<ObservableList<String>>> loadTask = new Task<TableView<ObservableList<String>>>() {
+            @Override
+            protected TableView<ObservableList<String>> call() throws Exception {
+                // Attempt to load the Firebird JDBC driver
                 try {
-                    Thread.sleep(3000);
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-        }
-
-        try {
-            for (int i = 0; i < firstTable.getItems().size(); i++) {
-                String startDate = convertDateFormat(firstTable.getItems().get(i).get(6));
-                String endDate = convertDateFormat(secondTable.getItems().get(i).get(6));
-
-                // Ověření a prohození hodnot, pokud je to potřeba
-                if (endDate.compareTo(startDate) < 0) {
-                    String temp = startDate;
-                    startDate = convertDateFormat(secondTable.getItems().get(i).get(6));
-                    endDate = convertDateFormat(firstTable.getItems().get(i).get(6));
+                    Class.forName("org.firebirdsql.jdbc.FBDriver");
+                } catch (ClassNotFoundException e) {
+                    logger.error("Error: Firebird JDBC driver not found.", e);
+                    throw e; // Re-throw the exception to be caught in setOnFailed
                 }
 
-                String serialNumber = firstTable.getItems().get(i).get(2);
-
-                String query = myqQuery.replace("@StartDate", "'" + startDate + "'")
-                        .replace("@EndDate", "'" + endDate + "'")
-                        .replace("@SerialNumber", "'" + serialNumber + "'");
-
-                //System.out.println("Executing query for serial number: " + serialNumber);
-                logger.info("Executing query for serial number: " + serialNumber);
-
-
-                try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
-                    ResultSetMetaData metaData = rs.getMetaData();
-                    if (myqTable.getColumns().isEmpty()) {
-                        for (int j = 1; j <= metaData.getColumnCount(); j++) {
-                            TableColumn<ObservableList<String>, String> column = new TableColumn<>(metaData.getColumnLabel(j));
-                            final int colIndex = j - 1;
-                            column.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(data.getValue().get(colIndex)));
-                            myqTable.getColumns().add(column);
+                Connection conn = null;
+                int attempts = 0;
+                while (attempts < 3) {
+                    try {
+                        conn = DriverManager.getConnection(dbUrl, dbUsername, dbPassword);
+                        logger.info("Connection to database established successfully!");
+                        break;
+                    } catch (SQLException e) {
+                        attempts++;
+                        logger.error("Connection attempt {} failed.", attempts, e);
+                        if (attempts == 3) {
+                            logger.error("Error: Unable to connect to the database after 3 attempts.", e);
+                            throw e; // Re-throw the exception
+                        }
+                        try {
+                            Thread.sleep(3000);
+                        } catch (InterruptedException ex) {
+                            Thread.currentThread().interrupt();
                         }
                     }
-                    while (rs.next()) {
-                        ObservableList<String> row = FXCollections.observableArrayList();
-                        for (int j = 1; j <= metaData.getColumnCount(); j++) {
-                            row.add(rs.getString(j));
-                        }
-                        myqTable.getItems().add(row);
-                    }
                 }
-            }
-        } catch (SQLException e) {
-            //System.err.println("Error: Unable to execute query.");
-            logger.error("Error: Unable to execute query.");
-            e.printStackTrace();
-        } finally {
-            try {
+
+                TableView<ObservableList<String>> myqTable = new TableView<>();
+                int totalRows = firstTable.getItems().size();
+                for (int i = 0; i < totalRows; i++) {
+                    String startDate = convertDateFormat(firstTable.getItems().get(i).get(6));
+                    String endDate = convertDateFormat(secondTable.getItems().get(i).get(6));
+
+                    // Ověření a prohození hodnot, pokud je to potřeba
+                    if (endDate.compareTo(startDate) < 0) {
+                        String temp = startDate;
+                        startDate = convertDateFormat(secondTable.getItems().get(i).get(6));
+                        endDate = convertDateFormat(firstTable.getItems().get(i).get(6));
+                    }
+
+                    String serialNumber = firstTable.getItems().get(i).get(2);
+
+                    String query = myqQuery.replace("@StartDate", "'" + startDate + "'")
+                            .replace("@EndDate", "'" + endDate + "'")
+                            .replace("@SerialNumber", "'" + serialNumber + "'");
+
+                    logger.info("Executing query for serial number: {}", serialNumber);
+
+                    try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
+                        ResultSetMetaData metaData = rs.getMetaData();
+                        if (myqTable.getColumns().isEmpty()) {
+                            for (int j = 1; j <= metaData.getColumnCount(); j++) {
+                                TableColumn<ObservableList<String>, String> column = new TableColumn<>(metaData.getColumnLabel(j));
+                                final int colIndex = j - 1;
+                                column.setCellValueFactory(data -> new javafx.beans.property.SimpleStringProperty(data.getValue().get(colIndex)));
+                                myqTable.getColumns().add(column);
+                            }
+                        }
+                        while (rs.next()) {
+                            ObservableList<String> row = FXCollections.observableArrayList();
+                            for (int j = 1; j <= metaData.getColumnCount(); j++) {
+                                row.add(rs.getString(j));
+                            }
+                            myqTable.getItems().add(row);
+                        }
+                    }
+                    updateProgress(i + 1, totalRows); // Aktualizace průběhu
+                }
+
                 if (conn != null) {
                     conn.close();
                 }
-            } catch (SQLException e) {
-                e.printStackTrace();
-            }
-        }
 
-        tablesContainer.getChildren().addAll(myqLabel, myqTable);
-        checkButton.setDisable(false); //aktivace tlacitka CHECK
-        //System.out.println("there are oncreate " + tablesContainer.getChildren().size());
-        logger.info("there are oncreate " + tablesContainer.getChildren().size());
+                return myqTable;
+            }
+        };
+
+        loadTask.setOnSucceeded(event -> {
+            progressBar.setVisible(false);
+            TableView<ObservableList<String>> myqTable = loadTask.getValue();
+            Label myqLabel = new Label("MyQ DATA");
+            myqLabel.setFont(Font.font("Arial", 14));
+            myqLabel.setTextFill(Color.web("#f24f13"));
+            myqLabel.setStyle("-fx-font-weight: bold;");
+            tablesContainer.getChildren().addAll(myqLabel, myqTable);
+            checkButton.setDisable(false); // Aktivace tlačítka CHECK po dokončení
+            logger.info("MyQ Data loaded successfully and added to UI.");
+        });
+
+        loadTask.setOnFailed(event -> {
+            progressBar.setVisible(false);
+            Throwable e = loadTask.getException();
+            logger.error("Error during MyQ data loading.", e);
+            // Zde můžete zobrazit uživateli chybovou zprávu
+        });
+
+        // Svatání ProgressBaru s Taskem (volitelné, pokud chcete zobrazovat průběh)
+        progressBar.progressProperty().bind(loadTask.progressProperty());
+
+        executorService.submit(loadTask);
     }
+
+    // Ukončení ExecutorService při zavření aplikace
+    public void shutdownExecutor() {
+        if (executorService != null && !executorService.isShutdown()) {
+            executorService.shutdownNow();
+        }
+    }
+
 
 
     @FXML

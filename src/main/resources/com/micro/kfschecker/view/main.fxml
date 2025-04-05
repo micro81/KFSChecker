@@ -106,8 +106,8 @@
          <Point3D />
       </rotationAxis>
    </HBox>
-   <ProgressBar fx:id="progressBar" prefHeight="18.0" prefWidth="1525.0" progress="0.0" visible="false" />
-   <TextArea fx:id="logOutput" editable="false" prefHeight="100" wrapText="true">
+   <ProgressBar fx:id="progressBar" minHeight="-Infinity" prefHeight="18.0" prefWidth="1525.0" progress="0.0" visible="false" />
+   <TextArea fx:id="logOutput" editable="false" minHeight="-Infinity" prefHeight="100" wrapText="true">
       <font>
          <Font name="System Bold" size="12.0" />
       </font>
