@@ -1,11 +1,12 @@
 module com.micro.kfschecker {
     requires javafx.controls;
     requires javafx.fxml;
-    requires java.sql;
-    requires java.desktop;
     requires itextpdf;
-    requires org.apache.commons.csv;
     requires org.apache.commons.io;
+    requires org.apache.logging.log4j.core;
+    requires org.apache.commons.csv;
+    requires org.slf4j;
+    requires java.sql;
 
 
     opens com.micro.kfschecker to javafx.fxml;
