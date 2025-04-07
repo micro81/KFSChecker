@@ -101,6 +101,22 @@ public class Controller {
 
     private static final Logger logger = LoggerFactory.getLogger(Controller.class);
 
+    public void shutdownExecutor() {
+        if (executorService != null) {
+            executorService.shutdown(); // Zakáže přijímání nových úkolů
+            try {
+                // Čeká na dokončení běžících úkolů s časovým limitem
+                if (!executorService.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
+                    System.err.println("ExecutorService se nepodařilo ukončit včas.");
+                    executorService.shutdownNow(); // Násilně ukončí běžící úkoly
+                }
+            } catch (InterruptedException e) {
+                executorService.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
+    }
+
     private void loadDatabaseConfig() {
         try {
             List<String> lines = Files.readAllLines(Paths.get("h:/Coding/Java/Projects/KFSChecker/mnt/data/db-connection.txt"));
@@ -399,6 +415,8 @@ public class Controller {
 
         loadTask.setOnSucceeded(event -> {
             progressBar.setVisible(false);
+            progressBar.progressProperty().unbind(); // Zrušíme svazek
+            progressBar.setProgress(0);             // Nyní můžeme nastavit hodnotu
             TableView<ObservableList<String>> myqTable = loadTask.getValue();
             Label myqLabel = new Label("MyQ DATA");
             myqLabel.setFont(Font.font("Arial", 14));
@@ -411,6 +429,8 @@ public class Controller {
 
         loadTask.setOnFailed(event -> {
             progressBar.setVisible(false);
+            progressBar.progressProperty().unbind(); // Zrušíme svazek
+            progressBar.setProgress(0);             // Nyní můžeme nastavit hodnotu
             Throwable e = loadTask.getException();
             logger.error("Error during MyQ data loading.", e);
             // Zde můžete zobrazit uživateli chybovou zprávu
@@ -421,15 +441,6 @@ public class Controller {
 
         executorService.submit(loadTask);
     }
-
-    // Ukončení ExecutorService při zavření aplikace
-    public void shutdownExecutor() {
-        if (executorService != null && !executorService.isShutdown()) {
-            executorService.shutdownNow();
-        }
-    }
-
-
 
     @FXML
     private void handleCheck() {
@@ -551,7 +562,7 @@ public class Controller {
         File file = fileChooser.showSaveDialog(null);
         if (file != null) {
             progressBar.setVisible(true); // Zobrazte progress bar
-            progressBar.setProgress(0); // Resetujte progress bar
+            //progressBar.setProgress(0); // Resetujte progress bar
 
             Task<Void> saveTask = new Task<Void>() {
                 @Override
@@ -723,6 +734,8 @@ public class Controller {
 
             saveTask.setOnSucceeded(event -> {
                 progressBar.setVisible(false);
+                progressBar.progressProperty().unbind(); // Zrušíme svazek
+                progressBar.setProgress(0);             // Nyní můžeme nastavit hodnotu
                 Alert alert = new Alert(AlertType.INFORMATION);
                 alert.setTitle("PDF Uloženo");
                 alert.setHeaderText(null);
@@ -741,6 +754,8 @@ public class Controller {
 
             saveTask.setOnFailed(event -> {
                 progressBar.setVisible(false);
+                progressBar.progressProperty().unbind(); // Zrušíme svazek
+                progressBar.setProgress(0);             // Nyní můžeme nastavit hodnotu
                 Alert alert = new Alert(AlertType.ERROR);
                 alert.setTitle("Chyba při ukládání");
                 alert.setHeaderText(null);
