@@ -7,7 +7,7 @@
         <TextAreaAppender name="TextAreaLog" textAreaId="logOutput" />
     </Appenders>
     <Loggers>
-        <Root level="info"> /*minimum logging level (debug, info, warn, error)*/
+        <Root level="debug"> /*minimum logging level (debug, info, warn, error)*/
             <AppenderRef ref="Console"/>
             <AppenderRef ref="TextAreaLog"/>
         </Root>

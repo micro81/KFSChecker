@@ -561,68 +561,75 @@ public class Controller {
 
         File file = fileChooser.showSaveDialog(null);
         if (file != null) {
-            progressBar.setVisible(true); // Zobrazte progress bar
-            //progressBar.setProgress(0); // Resetujte progress bar
+            progressBar.setVisible(true);
 
             Task<Void> saveTask = new Task<Void>() {
                 @Override
                 protected Void call() throws Exception {
-                    Document document = new Document(new Rectangle(PageSize.A4.rotate().getWidth(), PageSize.A4.rotate().getHeight()), 20, 20, 30, 30);
-                    PdfWriter.getInstance(document, new FileOutputStream(file));
+                    Document document = new Document(new Rectangle(PageSize.A4.rotate().getWidth(), PageSize.A4.rotate().getHeight()), 20, 20, 80, 30);
+                    PdfWriter writer = PdfWriter.getInstance(document, new FileOutputStream(file));
+                    writer.setPageEvent(new PageNumberHeader());
                     document.open();
 
-                    // Přidání hlavičky do PDF
-                    PdfPTable headerTable = new PdfPTable(2);
-                    headerTable.setWidthPercentage(100);
-                    headerTable.setWidths(new float[]{1, 3});
-
-                    // Vložení loga do PDF
-                    InputStream imageStream = getClass().getResourceAsStream("/com/micro/kfschecker/img/imglogo-basic-color-nobg-rgb.png");
-                    if (imageStream != null) {
-                        try {
-                            Image logo = Image.getInstance(toByteArray(imageStream));
-                            logo.scaleToFit(80, 31);
-                            PdfPCell logoCell = new PdfPCell(logo, false);
-                            logoCell.setBorder(Rectangle.NO_BORDER);
-                            logoCell.setHorizontalAlignment(Element.ALIGN_LEFT);
-                            headerTable.addCell(logoCell);
-                        } catch (IOException e) {
-                            Platform.runLater(() -> { // Aktualizace UI z vlákna Tasku
-                                //System.err.println("Could not load logo image: " + e.getMessage());
-                                logger.error("Could not load logo image: " + e.getMessage());
-                                // Zde můžete zobrazit uživateli upozornění, pokud chcete
-                            });
-                        } finally {
-                            try {
-                                imageStream.close();
-                            } catch (IOException e) {
-                                e.printStackTrace();
-                            }
-                        }
-                    } else {
-                        Platform.runLater(() -> { // Aktualizace UI z vlákna Tasku
-                            //System.err.println("Could not load logo image from classpath: /com/micro/kfschecker/img/imglogo-basic-color-nobg-rgb.png");
-                            logger.error("Could not load logo image from classpath: /com/micro/kfschecker/img/imglogo-basic-color-nobg-rgb.png");
-                            // Zde můžete zobrazit uživateli upozornění, pokud chcete
-                        });
+                    // Získání referencí na tabulky
+                    TableView<ObservableList<String>> resultTable = null;
+                    TableView<ObservableList<String>> myqTable = null;
+                    if (tablesContainer.getChildren().size() >= 8) {
+                        resultTable = (TableView<ObservableList<String>>) tablesContainer.getChildren().get(5);
+                        myqTable = (TableView<ObservableList<String>>) tablesContainer.getChildren().get(7);
                     }
 
-                    // Vložení nadpisu do PDF
-                    com.itextpdf.text.Font headerFont = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 20, new BaseColor(49, 143, 216));
-                    PdfPCell textCell = new PdfPCell(new Phrase("KFS Checker", headerFont));
-                    textCell.setBorder(Rectangle.NO_BORDER);
-                    textCell.setVerticalAlignment(Element.ALIGN_BOTTOM);
-                    textCell.setHorizontalAlignment(Element.ALIGN_LEFT);
-                    textCell.setBackgroundColor(new BaseColor(255, 255, 255));
+                    List<String> warnings = new ArrayList<>();
+                    Set<TablePosition> resultMismatches = new HashSet<>();
+                    Set<TablePosition> myqMismatches = new HashSet<>();
 
-                    headerTable.addCell(textCell);
-                    document.add(headerTable);
-                    document.add(new Paragraph("\n"));
+                    // Provedení kontroly pro zjištění neshod
+                    if (resultTable != null && myqTable != null) {
+                        for (int i = 0; i < resultTable.getItems().size(); i++) {
+                            ObservableList<String> resultRow = resultTable.getItems().get(i);
+                            if (resultRow.size() > 2) {
+                                String keyResult = resultRow.get(2);
+
+                                for (int j = 0; j < myqTable.getItems().size(); j++) {
+                                    ObservableList<String> myqRow = myqTable.getItems().get(j);
+                                    if (myqRow.size() > 2) {
+                                        String keyMyq = myqRow.get(2);
+
+                                        if (keyResult.equals(keyMyq)) {
+                                            if (resultRow.size() > 8 && myqRow.size() > 6) {
+                                                String resultValue1 = resultRow.get(8);
+                                                String myqValue1 = myqRow.get(6);
+
+                                                if (!Objects.equals(resultValue1, myqValue1)) {
+                                                    warnings.add("Mismatch in column 9/7 for key " + keyResult + ": " + resultValue1 + " != " + myqValue1);
+                                                    resultMismatches.add(new TablePosition<>(resultTable, i, resultTable.getColumns().get(8)));
+                                                    myqMismatches.add(new TablePosition<>(myqTable, j, myqTable.getColumns().get(6)));
+                                                }
+                                            }
+
+                                            if (resultRow.size() > 9 && myqRow.size() > 7) {
+                                                String resultValue2 = resultRow.get(9);
+                                                String myqValue2 = myqRow.get(7);
+
+                                                if (!Objects.equals(resultValue2, myqValue2)) {
+                                                    warnings.add("Mismatch in column 10/8 for key " + keyResult + ": " + resultValue2 + " != " + myqValue2);
+                                                    resultMismatches.add(new TablePosition<>(resultTable, i, resultTable.getColumns().get(9)));
+                                                    myqMismatches.add(new TablePosition<>(myqTable, j, myqTable.getColumns().get(7)));
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    logger.info("Result Mismatches: " + resultMismatches);
+                    logger.info("MyQ Mismatches: " + myqMismatches);
 
                     int totalElements = tablesContainer.getChildren().size();
                     int totalWork = 0;
 
-                    // Spočítáme celkový počet práce
                     for (Node node : tablesContainer.getChildren()) {
                         if (node instanceof Label) {
                             totalWork++;
@@ -632,20 +639,8 @@ public class Controller {
                     }
 
                     int completedWork = 0;
-
-                    //System.out.println("Celkovy pocet prvku k ulozeni: " + tablesContainer.getChildren().size());
-                    logger.info("Celkovy pocet prvku k ulozeni: " + tablesContainer.getChildren().size());
-                    int celkemRadku = 0;
-                    for (Node node : tablesContainer.getChildren()) {
-                        if (node instanceof TableView) {
-                            celkemRadku += ((TableView<?>) node).getItems().size();
-                        }
-                    }
-                    //System.out.println("Celkovy pocet radku v tabulkach: " + celkemRadku);
-                    logger.info("Celkovy pocet radku v tabulkach: " + celkemRadku);
-                    //System.out.println("Celkova prace (totalWork): " + totalWork);
-                    logger.info("Celkova prace (totalWork): " + totalWork);
-
+                    boolean firstTable = true;
+                    boolean firstLabel = true;
 
                     for (int i = 0; i < totalElements; i++) {
                         if (isCancelled()) {
@@ -660,71 +655,74 @@ public class Controller {
                             return null;
                         }
 
-                        if (tablesContainer.getChildren().get(i) instanceof Label) {
-                            Label label = (Label) tablesContainer.getChildren().get(i);
+                        Node node = tablesContainer.getChildren().get(i);
+                        if (node instanceof Label) {
+                            if (!firstLabel) {
+                                document.newPage(); // Vytvoří novou stránku pro každý label po prvním
+                            }
+                            firstLabel = false;
+
+                            Label label = (Label) node;
                             document.add(new Paragraph(label.getText(), FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12)));
                             document.add(new Paragraph("\n"));
+
                             completedWork++;
-                            //this.updateProgress((double) completedWork, totalWork);
-                            double progress = (double) completedWork / (double) totalWork;
-                            this.updateProgress(progress);
-                            //System.out.println("Dokoncena prace: " + completedWork + ", Celkova prace: " + totalWork + ", Pokrok: " + progress);
-                            logger.info("Dokoncena prace: " + completedWork + ", Celkova prace: " + totalWork + ", Pokrok: " + progress);
+                            this.updateProgress((double) completedWork / totalWork);
                         }
-                        if (tablesContainer.getChildren().get(i) instanceof TableView) {
-                            TableView<ObservableList<String>> tableView = (TableView<ObservableList<String>>) tablesContainer.getChildren().get(i);
-                            PdfPTable pdfTable = new PdfPTable(tableView.getColumns().size());
+                        if (node instanceof TableView) {
+                            if (!firstTable) {
+                                // Tato podmínka by se nyní neměla spouštět, protože novou stránku by měl zajistit label
+                                // Ale pro jistotu zde necháváme, pokud by struktura byla neočekávaná
+                                // document.newPage();
+                            }
+                            firstTable = false;
+
+                            TableView<ObservableList<String>> currentTableView = (TableView<ObservableList<String>>) node;
+                            PdfPTable pdfTable = new PdfPTable(currentTableView.getColumns().size());
                             pdfTable.setWidthPercentage(100);
 
                             // Přidání hlaviček
-                            for (TableColumn<ObservableList<String>, ?> column : tableView.getColumns()) {
+                            for (TableColumn<ObservableList<String>, ?> column : currentTableView.getColumns()) {
                                 PdfPCell headerCell = new PdfPCell(new Phrase(column.getText(), FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, BaseColor.WHITE)));
                                 headerCell.setBackgroundColor(new BaseColor(242, 79, 19));
                                 pdfTable.addCell(headerCell);
                             }
 
                             // Přidání datových řádků
-                            int totalRows = tableView.getItems().size();
+                            int totalRows = currentTableView.getItems().size();
                             for (int rowIndex = 0; rowIndex < totalRows; rowIndex++) {
-                                ObservableList<String> row = tableView.getItems().get(rowIndex);
-                                for (int columnIndex = 0; columnIndex < tableView.getColumns().size(); columnIndex++) {
+                                ObservableList<String> row = currentTableView.getItems().get(rowIndex);
+                                for (int columnIndex = 0; columnIndex < currentTableView.getColumns().size(); columnIndex++) {
                                     String cellValue = row.get(columnIndex);
-                                    TableColumn<ObservableList<String>, ?> currentcolumn = tableView.getColumns().get(columnIndex);
-
-                                    javafx.scene.control.TableCell<ObservableList<String>, ?> tableCell = getTableCell(tableView, rowIndex, columnIndex);
-                                    javafx.scene.paint.Color fxBackgroundColor = null;
-                                    if (tableCell != null && tableCell.getBackground() != null) {
-                                        fxBackgroundColor = (javafx.scene.paint.Color) tableCell.getBackground().getFills().get(0).getFill();
-                                    }
-
                                     PdfPCell pdfCell = new PdfPCell(new Phrase(cellValue, FontFactory.getFont(FontFactory.HELVETICA, 8)));
 
-                                    if (fxBackgroundColor != null) {
-                                        int red = (int) (fxBackgroundColor.getRed() * 255);
-                                        int green = (int) (fxBackgroundColor.getGreen() * 255);
-                                        int blue = (int) (fxBackgroundColor.getBlue() * 255);
-                                        pdfCell.setBackgroundColor(new BaseColor(red, green, blue));
+                                    if (currentTableView == resultTable) {
+                                        TablePosition pos = new TablePosition(resultTable, rowIndex, resultTable.getColumns().get(columnIndex));
+                                        logger.debug("Kontroluji shodu v Result Table na pozici: " + pos);
+                                        if (resultMismatches.contains(pos)) {
+                                            logger.debug("Neshoda nalezena v Result Table na pozici: " + pos);
+                                            pdfCell.setBackgroundColor(new BaseColor(255, 0, 0)); // Změna barvy pro testování
+                                        }
+                                    } else if (currentTableView == myqTable) {
+                                        TablePosition pos = new TablePosition(myqTable, rowIndex, myqTable.getColumns().get(columnIndex));
+                                        logger.debug("Kontroluji shodu v MyQ Table na pozici: " + pos);
+                                        if (myqMismatches.contains(pos)) {
+                                            logger.debug("Neshoda nalezena v MyQ Table na pozici: " + pos);
+                                            pdfCell.setBackgroundColor(new BaseColor(255, 0, 0)); // Změna barvy pro testování
+                                        }
                                     }
                                     pdfTable.addCell(pdfCell);
                                 }
                                 completedWork++;
                                 this.updateProgress((double) completedWork / totalWork);
-
                             }
                             document.add(pdfTable);
-                            document.add(new Paragraph("\n"));
-
+                            // document.add(new Paragraph("\n"));
                         }
                     }
-                    //System.out.println("Dokonceno zpracovani vsech prvku v call() metode.");
-                    logger.info("Dokonceno zpracovani vsech prvku v call() metode.");
                     document.close();
 
-                    Platform.runLater(() -> {
-                        //System.out.println("PDF file saved successfully: " + file.getAbsolutePath());
-                        logger.info("PDF file saved successfully: " + file.getAbsolutePath());
-                        // Hláška o úspěchu se nyní zobrazuje v setOnSucceeded
-                    });
+                    Platform.runLater(() -> logger.info("PDF file saved successfully: " + file.getAbsolutePath()));
                     return null;
                 }
 
@@ -734,28 +732,23 @@ public class Controller {
 
             saveTask.setOnSucceeded(event -> {
                 progressBar.setVisible(false);
-                progressBar.progressProperty().unbind(); // Zrušíme svazek
-                progressBar.setProgress(0);             // Nyní můžeme nastavit hodnotu
+                progressBar.progressProperty().unbind();
+                progressBar.setProgress(0);
                 Alert alert = new Alert(AlertType.INFORMATION);
                 alert.setTitle("PDF Uloženo");
                 alert.setHeaderText(null);
                 alert.setContentText("PDF soubor byl uspesně ulozen: " + file.getAbsolutePath());
-                //alert.show();
-                //System.out.println("Pokousim se zobrazit alert okno o ulozeni PDF.");
-                logger.info("Pokousim se zobrazit alert okno o ulozeni PDF.");
                 try {
                     alert.show();
                 } catch (Exception e) {
-                    e.printStackTrace();
-                    //System.err.println("Chyba pri zobrazovani alert okna: " + e.getMessage());
                     logger.error("Chyba pri zobrazovani alert okna: " + e.getMessage());
                 }
             });
 
             saveTask.setOnFailed(event -> {
                 progressBar.setVisible(false);
-                progressBar.progressProperty().unbind(); // Zrušíme svazek
-                progressBar.setProgress(0);             // Nyní můžeme nastavit hodnotu
+                progressBar.progressProperty().unbind();
+                progressBar.setProgress(0);
                 Alert alert = new Alert(AlertType.ERROR);
                 alert.setTitle("Chyba při ukládání");
                 alert.setHeaderText(null);
